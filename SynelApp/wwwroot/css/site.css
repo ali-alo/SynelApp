@@ -1,0 +1,59 @@
+html {
+  font-size: 14px;
+}
+
+@media (min-width: 768px) {
+  html {
+    font-size: 16px;
+  }
+}
+
+html {
+  position: relative;
+  min-height: 100%;
+}
+
+body {
+  margin-bottom: 60px;
+}
+
+.cursor-pointer {
+    cursor: pointer;
+}
+
+.csv-input-div {
+    height: 150px;
+    border-radius: 5px;
+    border: 2px dotted black;
+}
+
+.file {
+    opacity: 0;
+}
+
+.toast {
+    background-color: rgb(255, 255, 255);
+}
+
+.toast-success {
+    border-left: 8px solid #28a745;
+}
+
+.toast-danger {
+    border-left: 8px solid #ff0000;
+}
+
+.toast-primary {
+    border-left: 8px solid #0e87ed;
+}
+
+.btn:focus,
+.no-outline:focus,
+.no-outline:active {
+    outline: none;
+    box-shadow: none !important;
+}
+
+.tabulator-row :hover {
+    background-color: #efefef;
+}

@@ -1,0 +1,218 @@
+﻿@using Microsoft.AspNetCore.Http.Extensions;
+@{
+    ViewData["Title"] = "Employees Page";
+    int? processedCount = (int?)TempData["processed"];
+}
+
+@if (processedCount != null)
+{
+    <h4 class="text-center text-secondary">
+        @TempData["fileInfo"]
+        <span class="text-primary">@processedCount</span>
+        @(processedCount == 1 ? "employee" : "employees") were added
+    </h4>
+}
+
+<h4>Add a csv file</h4>
+<form asp-action="ProcessCSV" enctype="multipart/form-data" method="post">
+    <div class="csv-input-div w-100 d-flex justify-content-center align-items-center text-center position-relative">
+        <p id="fileName" class="mb-0">Click to choose or drag & drop your csv file here...</p>
+        <input type="file" name="file" id="csv-input" class="form-control file h-100 w-100 position-absolute cursor-pointer" accept=".csv" />
+    </div>
+    <input type="submit" value="Upload and Process" class="btn btn-outline-primary mt-3"/>
+</form>
+
+<hr />
+
+<h4>Filter the rows</h4>
+
+<div class="row">
+    <div class="col-12 col-md-3 col-lg-3 pe-md-0">
+        <select id="filter-field" class="form-select">
+            <option></option>
+            <option value="payrollNumber">Payroll Number</option>
+            <option value="forenames">Forenames</option>
+            <option value="dateOfBirth">Date of Birth</option>
+            <option value="telephone">Telephone</option>
+            <option value="mobile">Mobile</option>
+            <option value="address">Address</option>
+            <option value="postcode">Postcode</option>
+            <option value="emailHome">Email Home</option>
+            <option value="startDate">Start Date</option>
+        </select>
+    </div>
+
+    <div class="col-3 col-md-2 col-xxl-1 mx-auto my-2 m-md-0">
+        <select id="filter-type" class="form-select">
+            <option value="like">like</option>
+            <option value="=">=</option>
+            <option value="<"><</option>
+            <option value="<="><=</option>
+            <option value=">">></option>
+            <option value=">=">>=</option>
+            <option value="!=">!=</option>
+        </select>
+    </div>
+
+    <div class="col-12 col-md-3 ps-md-0">
+        <input id="filter-value" type="text" placeholder="value to filter" class="form-control">
+    </div>
+    
+    <div class="col mt-2 m-md-0 d-flex justify-content-between">
+        <button id="filter-clear" class="btn btn-secondary">Clear Filter</button>
+        <button id="refresh" class="btn btn-outline-secondary" onclick="refreshData()">Refresh data</button>
+    </div>
+</div>
+
+
+<div id="table" class="table table-striped mt-4">
+</div>
+
+<div aria-live="polite" aria-atomic="true">
+    <div class="toast-container position-absolute  bottom-0 end-0" id="toast-container">
+    </div>
+</div>
+
+<script>
+    const csvInput = document.getElementById("csv-input");
+    const namePrev = document.getElementById("fileName");
+
+    csvInput.addEventListener("change", () => {
+        const file = csvInput.files[0];
+        if (file && file.type.match(".csv")) {
+            namePrev.innerHTML = file.name;
+        } else {
+            namePrev.innerHTML = "Invalid file format";
+            csvInput.value = null;
+        }
+    });
+
+    //Define variables for input elements
+    var fieldEl = document.getElementById("filter-field");
+    var typeEl = document.getElementById("filter-type");
+    var valueEl = document.getElementById("filter-value");
+
+
+    //Trigger setFilter function with correct parameters
+    function updateFilter() {
+        var filterVal = fieldEl.options[fieldEl.selectedIndex].value;
+        var typeVal = typeEl.options[typeEl.selectedIndex].value;
+        table.setFilter(filterVal, typeVal, valueEl.value);
+    }
+
+    //Update filters on value change
+    document.getElementById("filter-field").addEventListener("change", updateFilter);
+    document.getElementById("filter-type").addEventListener("change", updateFilter);
+    document.getElementById("filter-value").addEventListener("keyup", updateFilter);
+
+    //Clear filters on "Clear Filters" button click
+    document.getElementById("filter-clear").addEventListener("click", function () {
+        fieldEl.value = "";
+        typeEl.value = "like";
+        valueEl.value = "";
+        table.clearFilter();
+    });
+
+    //Define Tabulator model and populate data
+    var table = new Tabulator("#table", {
+        layout: "fitDataFill",
+        ajaxURL: "@Context.Request.GetDisplayUrl()" + "home/employees",
+        placeholder: "No Data Set",
+        pagination: "local",
+        paginationSize: 5,
+        paginationSizeSelector: [5, 10, 25, 50],
+        paginationCounter: "rows",
+        columns: [
+            { title: "Id", field: "id" },
+            { title: "Payroll Number", field: "payrollNumber", editor: "input", validator: "required", editorParams: { elementAttributes: { maxlength: "20" } } },
+            { title: "Forenames", field: "forenames", editor: "input", validator: "required", editorParams: { elementAttributes: { maxlength: "50" } } },
+            { title: "Date of Birth", field: "dateOfBirth", editor: "date", validator: "required", },
+            { title: "Telephone", field: "telephone", editor: "input", validator: "required", editorParams: { elementAttributes: { maxlength: "20" } } },
+            { title: "Mobile", field: "mobile", editor: "input", validator: "required", editorParams: { elementAttributes: { maxlength: "20" } } },
+            { title: "Address", field: "address", editor: "input", validator: "required", editorParams: { elementAttributes: { maxlength: "255" } } },
+            { title: "Address 2", field: "address2", editor:"input", editorParams: { elementAttributes : { maxlength:"255" } } },
+            { title: "Postcode", field: "postcode", editor: "input", validator: "required", editorParams: { elementAttributes: { maxlength: "20" } } },
+            { title: "Email Home", field: "emailHome", editor: "input", validator: "required", editorParams: { elementAttributes: { maxlength: "100" } } },
+            { title: "Start Date", field: "startDate", validator: "required", editor: "date" },
+        ]
+    });
+
+
+    //Edit functionality
+    let lastEditFailed = false; // this vairable is needed to not display success toast after changes are revert
+
+    //Register event
+    table.on("cellEdited", function(cell) {
+        var field = cell.getColumn().getField();
+        var row = cell.getRow().getData();
+        var newValue = cell.getValue();
+
+        console.log(`Id is: ${row.id}`);
+        //Create a JSONPatch document for the update
+        var patch = [
+            {op: "replace", path: field, value: newValue }
+        ];
+
+        //Send the patch request
+        fetch("/home/UpdateEmployee/" + `${row.id}`, {
+            method: "PATCH",
+            body: JSON.stringify(patch),
+            headers: {
+                "Content-Type": "application/json"
+            }
+        })
+        .then(response => {
+            // process a response from the server
+            if (response.ok) {
+                return response.json()
+                    .then(data => {
+                        console.log(data);
+
+                        if (!lastEditFailed)  // do not show the toast if the changes were revent back to valid values
+                        {
+                            //Display a success Bootstrap toast notification
+                                showToaster('success', `${data.forenames} (ID: ${data.id})`, 'Employee was updated');
+                        }
+                        lastEditFailed = false;
+                    });
+            } else {
+                return response.json()
+                    .then(data => {
+                        cell.setValue(data[field]);  // revert to the old cell value because the input was incorrect
+
+                        //Display an error Bootstrap toast notification
+                            showToaster('danger', `${data.forenames} (ID: ${data.id})`, 'Cell validation failure. Changes were revert.');
+                        lastEditFailed = true;
+                    });
+            }
+        })
+        .catch(error => {
+            console.error("Error sending JSONPatch request: ", error);
+        });
+    });
+
+    function refreshData() {
+        // add some toast here
+        table.setData();
+        showToaster('primary', 'Request was fulfilled!', 'The table data is up to date.');
+    }
+
+    function showToaster(color, headerText, bodyText) {
+        
+        var toastContainer = document.getElementById('toast-container');
+        var toast = document.createElement('div');
+        toast.className = `toast toast-${color}`;
+        toast.innerHTML = `
+                                <div class="toast-header">
+                                    <strong class="me-auto">${headerText}</strong>
+                                    <button type="button" class="btn-close" data-bs-dismiss="toast" aria-label="Close"></button>
+                                </div>
+                                <div class="toast-body">
+                                     ${bodyText}
+                                </div>
+                            `;
+        toastContainer.appendChild(toast);
+        var bsToast = new bootstrap.Toast(toast);
+        bsToast.show();
+    }
+</script>
